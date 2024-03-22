@@ -1,0 +1,115 @@
+podTemplate(
+  inheritFrom: 'jenkins-agent',
+  containers: [
+    containerTemplate(name: 'node-container', image: 'node:18.4.0', alwaysPullImage: false, ttyEnabled: true, command: 'cat'),
+  ]
+) {
+  node(POD_LABEL) {
+    stage('Checkout leto project') {
+      checkout([$class: 'GitSCM', branches: [[name: "${LETO_BRANCH}"]], extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'leto-modelizer']], userRemoteConfigs: [[url: 'https://github.com/ditrit/leto-modelizer.git']]])
+      checkout([$class: 'GitSCM', branches: [[name: "${GITHUBATOR_BRANCH}"]], extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'githubator-plugin']], userRemoteConfigs: [[url: 'https://github.com/ditrit/githubator-plugin.git']]])
+      checkout([$class: 'GitSCM', branches: [[name: "${TERRATOR_BRANCH}"]], extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'terrator-plugin']], userRemoteConfigs: [[url: 'https://github.com/leto-socgen/terrator-plugin.git']]])
+      checkout([$class: 'GitSCM', branches: [[name: "${KUBERNATOR_BRANCH}"]], extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'kubernator-plugin']], userRemoteConfigs: [[url: 'https://github.com/ditrit/kubernator-plugin.git']]])
+      checkout([$class: 'GitSCM', branches: [[name: "${JENKINATOR_BRANCH}"]], extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'jenkinator-plugin']], userRemoteConfigs: [[url: 'https://github.com/leto-socgen/jenkinator-plugin.git']]])
+      checkout([$class: 'GitSCM', branches: [[name: "${DOCKERCOMPOSATOR_BRANCH}"]], extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'docker-composator-plugin']], userRemoteConfigs: [[url: 'https://github.com/Yassine-Chamkhi/docker-composator-plugin.git']]])
+    }
+
+    stage('Checkout cicd folder') {
+      dir('leto-gitops') {
+        checkout scm
+      }
+    }
+
+    stage('Prepare Plugins') {
+      dir('leto-modelizer') {
+        sh """
+          sed -i 's,leto-modelizer-plugin-core#.*",leto-modelizer-plugin-core#${CORE_VERSION}",g' package.json
+          sed -i 's,leto-modelizer-plugin-cli#.*",leto-modelizer-plugin-cli#${CLI_VERSION}",g' package.json
+          cat package.json
+        """
+      }
+      dir('terrator-plugin') {
+        sh """
+          sed -i 's,leto-modelizer-plugin-core#.*",leto-modelizer-plugin-core#${CORE_VERSION}",g' package.json
+        """
+      }
+      dir('githubator-plugin') {
+        sh """
+          sed -i 's,leto-modelizer-plugin-core#.*",leto-modelizer-plugin-core#${CORE_VERSION}",g' package.json
+        """
+      }
+
+      dir('kubernator-plugin') {
+        sh """
+          sed -i 's,leto-modelizer-plugin-core#.*",leto-modelizer-plugin-core#${CORE_VERSION}",g' package.json
+        """
+      }
+        dir('jenkinator-plugin') {
+          sh """
+            sed -i 's,leto-modelizer-plugin-core#.*",leto-modelizer-plugin-core#${CORE_VERSION}",g' package.json
+          """
+      }
+      dir('docker-composator-plugin') {
+        sh """
+          sed -i 's,leto-modelizer-plugin-core#.*",leto-modelizer-plugin-core#${CORE_VERSION}",g' package.json
+        """
+      }
+    }
+
+    stage('Build ') {
+      container('node-container') {
+        dir('leto-modelizer') {
+          sh """
+            rm -rf package-lock.json
+            npm install npm@latest -g
+            npm install  
+            npm install --save ../terrator-plugin
+            npm install --save ../githubator-plugin
+            npm install --save ../kubernator-plugin
+            npm install --save ../jenkinator-plugin
+            npm install --save ../docker-composator-plugin
+          
+            echo '{ "plugins": ["terrator-plugin" , "githubator-plugin" , "kubernator-plugin" , "docker-composator-plugin" , "jenkinator-plugin"] }'>plugin.config.json
+            cat plugin.config.json
+            npm run plugin:init
+
+            export MODELS_DEFAULT_FOLDER="acid"
+            export TEMPLATE_LIBRARY_BASE_URL="https://raw.githubusercontent.com/leto-socgen/leto-modelizer-templates-library/main"
+            npm run build
+          """
+        }
+      }
+    }
+    
+    stage('Build Docker Image') {
+      container('docker-daemon') {
+        dir('leto-modelizer') {
+          sh """
+            docker build -t ${REPO_NAME}/${IMAGE_NAME}:${IMAGE_TAG} -f ../leto-gitops/docker/Dockerfile .
+          """
+        }
+      }
+    }
+
+    stage('Push Docker Image') {
+      container('docker-daemon') {
+        withDockerRegistry(credentialsId: 'LETOacr', url: 'https://acrleto.azurecr.io') {
+          dir('leto-modelizer') {
+            sh """
+              docker push  ${REPO_NAME}/${IMAGE_NAME}:${IMAGE_TAG}
+            """
+          }
+        }
+      }
+    }
+
+    stage('Trigger cd') {
+      build job: '../leto/cd',
+      parameters: [
+        string(name: 'REPO_NAME', value: "${params.REPO_NAME}"),
+        string(name: 'IMAGE_NAME', value: "${params.IMAGE_NAME}"),
+        string(name: 'IMAGE_TAG', value: "${params.IMAGE_TAG}")
+      ]
+    }
+  }
+}
