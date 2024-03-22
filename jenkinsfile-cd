@@ -1,0 +1,29 @@
+podTemplate(
+  
+  containers: [
+      containerTemplate(
+          name: 'kubectl',
+          image: 'alpine/k8s:1.24.13',
+          command:'cat',
+          ttyEnabled: true,
+          privileged: true
+          )
+      ]
+    
+) 
+{
+node(POD_LABEL) {
+         stage('clone repository') {
+            dir('pipelines_repo'){
+                checkout scm
+                }         
+            }
+
+        stage('deploy app') {
+            container('kubectl'){
+                withCredentials([file(credentialsId: 'kube_file_training',variable:'KUBECONFIG')]) {
+                    sh ' kubectl apply -f k8s/ '
+          
+                }}
+        }
+}}
