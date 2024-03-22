@@ -1,7 +1,7 @@
 podTemplate(
   inheritFrom: 'jenkins-agent',
   containers: [
-    containerTemplate(name: 'node-container', image: 'node:18.4.0', alwaysPullImage: false, ttyEnabled: true, command: 'cat'),
+    containerTemplate(name: 'node-container', image: 'node:18.4.0', alwaysPullImage: false, ttyEnabled: true, command: 'cat')
   ]
 ) {
   node(POD_LABEL) {
@@ -29,7 +29,7 @@ podTemplate(
             docker build -t samarbelhadj/training:lts .
           """
         }
-      }
+      
     }
 
     stage('Push Docker Image') {
