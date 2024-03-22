@@ -35,7 +35,7 @@ podTemplate(
 
     stage('Push Docker Image') {
       container('docker-daemon') {
-         withCredentials([file(credentialsId: 'docker')]) {
+         withCredentials([usernamePassword(credentialsId: 'docker')]) {
         
             sh """
               docker push  samarbelhadj/training:lts
