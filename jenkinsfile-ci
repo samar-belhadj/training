@@ -16,8 +16,7 @@ podTemplate(
         
           sh """
             rm -rf package-lock.json
-            npm install npm@latest -g
-            npm run build
+            npm install 
           """
         }
       
@@ -32,14 +31,16 @@ podTemplate(
       
     }
 
+
+
     stage('Push Docker Image') {
       container('docker-daemon') {
-        withDockerRegistry(credentialsId: 'LETOacr', url: 'https://acrleto.azurecr.io') {
-          dir('leto-modelizer') {
+         withCredentials([file(credentialsId: 'docker')]) {
+        
             sh """
-              docker push  ${REPO_NAME}/${IMAGE_NAME}:${IMAGE_TAG}
+              docker push  samarbelhadj/training:lts
             """
-          }
+          
         }
       }
     }
